@@ -8,8 +8,8 @@ export default {
     "graphic": function() {
       let ceteicean = this;
       return function() {
-        let shadow = ceteicean.createShadowRoot();
-        this.addShadowStyle(shadow);
+        let shadow = this.createShadowRoot();
+        ceteicean.addShadowStyle(shadow);
         let img = new Image();
         img.src = ceteicean.rw(this.getAttribute("url"));
         if (this.hasAttribute("width")) {
