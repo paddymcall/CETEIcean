@@ -75,7 +75,7 @@ export default {
     },
     "graphic": function(elt) {
       let content = new Image();
-      content.src = this.rw(this.getAttribute("url"));
+      content.src = this.rw(elt.getAttribute("url"));
       if (elt.hasAttribute("width")) {
         content.width = elt.getAttribute("width").replace(/[^.0-9]/g, "");
       }
