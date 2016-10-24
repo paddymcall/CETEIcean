@@ -29,7 +29,12 @@
         Here is some <add>added</add> text.</p>
       <p>Here is a pointer: <ptr target="https://github.com/TEIC/CETEIcean"/>.
     And here is a <ref target="https://github.com/TEIC">ref</ref>. But
-    <ref target="addBehaviorTest.html">here</ref> is a relative link.  And this is a sentence with a note.<note>This is the note.</note></p>
+    <ref target="addBehaviorTest.html">here</ref> is a relative link.  And this is a sentence with a note.<note><p>This is the note.</p>
+    <list>
+      <item>item 1</item>
+      <item>item 2</item>
+    </list>
+      </note></p>
     <p><egXML xmlns="http://www.tei-c.org/ns/Examples"><fuzzbuckets>egXML test</fuzzbuckets></egXML></p>
     <p><graphic url="http://www.tei-c.org/About/Logos/TEI-175.jpg"></graphic></p>
     </body>
