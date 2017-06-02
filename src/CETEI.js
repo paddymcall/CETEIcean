@@ -19,6 +19,7 @@ class CETEI {
         }
         this.behaviors.push(behaviors);
         this.shadowCSS;
+        this.supportsShadowDom = document.head.createShadowRoot || document.head.attachShadow;
     }
 
     // public method
@@ -27,7 +28,7 @@ class CETEI {
        on the returned document.
      */
     getHTML5(TEI_url, callback, perElementFn){
-        if (window.location.href.startsWith(this.base)) {
+        if (window.location.href.startsWith(this.base) && (TEI_url.indexOf("/") >= 0)) {
           this.base = TEI_url.replace(/\/[^\/]*$/, "/");
         }
         // Get TEI from TEI_url and create a promise
@@ -65,6 +66,13 @@ class CETEI {
     makeHTML5(TEI, callback, perElementFn){
       // TEI is assumed to be a string
       let TEI_dom = ( new DOMParser() ).parseFromString(TEI, "text/xml");
+      return this.domToHTML5(TEI_dom, callback, perElementFn);
+    }
+
+    /* Converts the supplied TEI DOM into HTML5 Custom Elements. If a callback
+       function is supplied, calls it on the result.
+    */
+    domToHTML5(TEI_dom, callback, perElementFn){
 
       this._fromTEI(TEI_dom);
 
@@ -83,6 +91,9 @@ class CETEI {
                 newElement = document.createElement("teieg-" + el.tagName);
                 break;
               }
+            case "http://relaxng.org/ns/structure/1.0":
+              newElement = document.createElement("rng-" + el.tagName);
+              break;
             default:
               newElement = document.importNode(el, false);
               copy = true;
@@ -90,9 +101,10 @@ class CETEI {
           // Copy attributes; @xmlns, @xml:id, @xml:lang, and
           // @rendition get special handling.
           for (let att of Array.from(el.attributes)) {
-              if (att.name != "xmlns" || copy) {
+              if (!att.name.startsWith("xmlns") || copy) {
                 newElement.setAttribute(att.name, att.value);
               } else {
+                if (att.name == "xmlns")
                 newElement.setAttribute("data-xmlns", att.value); //Strip default namespaces, but hang on to the values
               }
               if (att.name == "xml:id" && !copy) {
@@ -105,8 +117,12 @@ class CETEI {
                 newElement.setAttribute("class", att.value.replace(/#/g, ""));
               }
           }
-          // Preseve element name so we can use it later
+          // Preserve element name so we can use it later
           newElement.setAttribute("data-teiname", el.localName);
+          // If element is empty, flag it
+          if (el.childNodes.length == 0) {
+            newElement.setAttribute("data-empty", "");
+          }
           // Turn <rendition scheme="css"> elements into HTML styles
           if (el.localName == "tagsDecl") {
             let style = document.createElement("style");
@@ -176,6 +192,9 @@ class CETEI {
       }
     }
 
+    /* If a URL where CSS for styling Shadow DOM elements lives has been defined,
+       insert it into the Shadow DOM.
+     */
     addShadowStyle(shadow) {
       if (this.shadowCSS) {
         shadow.innerHTML = "<style>" + "@import url(\"" + this.shadowCSS + "\");</style>" + shadow.innerHTML;
@@ -212,25 +231,24 @@ class CETEI {
 
     // private method
     _insert(elt, strings) {
-      if (elt.createShadowRoot) {
-        let shadow = elt.createShadowRoot();
-        this.addShadowStyle(shadow);
-        shadow.innerHTML += strings[0] + elt.innerHTML + (strings[1]?strings[1]:"");
-      } else {
-        let span;
-        if (strings.length > 1) {
-          if (strings[0].includes("<") && strings[1].includes("</")) {
-            elt.innerHTML = strings[0] + elt.innerHTML + strings[1];
-          } else {
-            elt.innerHTML = "<span>" + strings[0] + "</span>" + elt.innerHTML + "<span>" + strings[1] + "</span>";
-          }
+      let span = document.createElement("span");
+      if (strings.length > 1) {
+        if (strings[0].includes("<") && strings[1].includes("</")) {
+          span.innerHTML = strings[0] + elt.innerHTML + strings[1];
         } else {
-          if (strings[0].includes("<")) {
-            elt.innerHTML = strings[0] + elt.innerHTML;
-          } else {
-            elt.innerHTML = "<span>" + strings[0] + "</span>" + elt.innerHTML;
-          }
+          span.innerHTML = "<span>" + strings[0] + "</span>" + elt.innerHTML + "<span>" + strings[1] + "</span>";
         }
+      } else {
+        if (strings[0].includes("<")) {
+          span.innerHTML = strings[0] + elt.innerHTML;
+        } else {
+          span.innerHTML = "<span>" + strings[0] + "</span>" + elt.innerHTML;
+        }
+      }
+      if (span.children.length > 1) {
+        return span;
+      } else {
+        return span.children[0];
       }
     }
 
@@ -268,18 +286,13 @@ class CETEI {
        Called by the getHandler() and getFallback() methods
     */
     decorator(strings) {
-      return function() {
-        let ceteicean = this;
-        return function (elt) {
-          let copy = [];
-          if (this != ceteicean) {
-            elt = this;
-          }
-          for (let i = 0; i < strings.length; i++) {
-            copy.push(ceteicean._template(strings[i], elt));
-          }
-          ceteicean._insert(elt, copy);
+      let ceteicean = this;
+      return function (elt) {
+        let copy = [];
+        for (let i = 0; i < strings.length; i++) {
+          copy.push(ceteicean._template(strings[i], elt));
         }
+        return ceteicean._insert(elt, copy);
       }
     }
 
@@ -291,9 +304,9 @@ class CETEI {
       for (let i = this.behaviors.length - 1; i >= 0; i--) {
         if (this.behaviors[i]["handlers"][fn]) {
           if (Array.isArray(this.behaviors[i]["handlers"][fn])) {
-            return this.decorator(this.behaviors[i]["handlers"][fn]);
+            return this.append(this.decorator(this.behaviors[i]["handlers"][fn]));
           } else {
-            return this.behaviors[i]["handlers"][fn];
+            return this.append(this.behaviors[i]["handlers"][fn]);
           }
         }
       }
@@ -305,19 +318,67 @@ class CETEI {
      */
     getFallback(fn) {
       for (let i = this.behaviors.length - 1; i >= 0; i--) {
-        if (this.behaviors[i]["fallbacks"][fn]) {
-          if (Array.isArray(this.behaviors[i]["fallbacks"][fn])) {
-            return this.decorator(this.behaviors[i]["fallbacks"][fn]).call(this);
+        if (this.behaviors[i]["handlers"][fn]) {
+          if (Array.isArray(this.behaviors[i]["handlers"][fn])) {
+            return this.decorator(this.behaviors[i]["handlers"][fn]);
           } else {
-            return this.behaviors[i]["fallbacks"][fn];
+            return this.behaviors[i]["handlers"][fn];
           }
-        } else if (this.behaviors[i]["handlers"][fn] && Array.isArray(this.behaviors[i]["handlers"][fn])) {
-          // if there's a handler template, we can construct a fallback function
-          return this.decorator(this.behaviors[i]["handlers"][fn]).call(this);
-        } else if (this.behaviors[i]["handlers"][fn] && this.behaviors[i]["handlers"][fn].call(this).length == 1) {
-          return this.behaviors[i]["handlers"][fn].call(this);
         }
       }
+    }
+
+    /* Appends any element returned by the function passed in the first
+     * parameter to the element in the second parameter. If the function
+     * returns nothing, this is a no-op aside from any side effects caused
+     * by the provided function.
+
+     * called by getHandler() and fallback()
+     */
+    append(fn, elt) {
+      if (elt) {
+        let content = fn.call(this, elt);
+        if (content && !(elt.querySelector(":scope > " + content.nodeName))) {
+          if (this.supportsShadowDom) {
+            this._appendShadow(elt, content);
+          } else {
+            this._appendBasic(elt, content);
+          }
+        }
+      } else {
+        let self = this;
+        if (this.supportsShadowDom) {
+          return function() {
+            let content = fn.call(self, this);
+            if (content) {
+              self._appendShadow(this, content);
+            }
+          }
+        } else {
+          return function() {
+            let content = fn.call(self, this);
+            if (content && !(this.querySelector(":scope > " + content.nodeName))) {
+              self._appendBasic(this, content);
+            }
+          }
+        }
+      }
+    }
+
+    /* Private method called by append() if the browser supports Shadow DOM
+     */
+    _appendShadow(elt, content) {
+      var shadow = elt.attachShadow({mode:'open'});
+      this.addShadowStyle(shadow);
+      shadow.appendChild(content);
+    }
+
+    /* Private method called by append() if the browser does not support
+     * Shadow DOM
+     */
+    _appendBasic(elt, content) {
+      this.hideContent(elt);
+      elt.appendChild(content);
     }
 
     /* Registers the list of elements provided with the browser.
@@ -330,7 +391,7 @@ class CETEI {
         let proto = Object.create(HTMLElement.prototype);
         let fn = this.getHandler(name);
         if (fn) {
-          proto.createdCallback = fn.call(this);
+          proto.createdCallback = fn;
         }
         let prefixedName = this.tagName(name);
         try {
@@ -354,9 +415,8 @@ class CETEI {
         let fn = this.getFallback(name);
         if (fn) {
           for (let elt of Array.from(this.dom.getElementsByTagName(this.tagName(name)))) {
-            fn.call(this, elt);
+            this.append(fn, elt);
           }
-
         }
       }
     }
@@ -393,6 +453,9 @@ class CETEI {
           if (!attr.name.startsWith("data-") && !(["id", "lang", "class"].includes(attr.name))) {
             str += " " + attr.name + "=\"" + attr.value + "\"";
           }
+          if (attr.name == "data-xmlns") {
+            str += " xmlns=\"" + attr.value +"\"";
+          }
         }
         if (el.childNodes.length > 0) {
           str += ">";
@@ -421,14 +484,19 @@ class CETEI {
       return str;
     }
 
+    /* Wraps the content of the element parameter in a <span class="hide">
+     * with display set to "none".
+     */
     hideContent(elt) {
-      let content = elt.innerHTML;
-      elt.innerHTML = "";
-      let hidden = document.createElement("span");
-      hidden.setAttribute("style", "display:none;");
-      hidden.setAttribute("class", "hide");
-      hidden.innerHTML = content;
-      elt.appendChild(hidden);
+      if (elt.childNodes.length > 0) {
+        let content = elt.innerHTML;
+        elt.innerHTML = "";
+        let hidden = document.createElement("span");
+        hidden.setAttribute("style", "display:none;");
+        hidden.setAttribute("class", "hide");
+        hidden.innerHTML = content;
+        elt.appendChild(hidden);
+      }
     }
 
     unEscapeEntities(str) {
@@ -436,6 +504,16 @@ class CETEI {
                 .replace(/&quot;/, "\"")
                 .replace(/&apos;/, "'")
                 .replace(/&amp;/, "&");
+    }
+
+    savePosition() {
+      localStorage.setItem("scroll",window.scrollY);
+    }
+
+    restorePosition() {
+      if (localStorage.getItem("scroll")) {
+        window.scrollTo(0, localStorage.getItem("scroll"));
+      }
     }
 
     // public method
@@ -456,6 +534,8 @@ class CETEI {
 try {
   if (window) {
       window.CETEI = CETEI;
+      window.unload = CETEI.savePosition;
+      window.load = CETEI.restorePosition;
   }
 } catch (e) {
   // window not defined;
