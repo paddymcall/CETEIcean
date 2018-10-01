@@ -1,5 +1,10 @@
 export default {
-  "handlers": {
+  "namespaces": {
+    "tei": "http://www.tei-c.org/ns/1.0",
+    "teieg": "http://www.tei-c.org/ns/Examples",
+    "rng": "http://relaxng.org/ns/structure/1.0"  
+  },
+  "tei": {
     "eg": ["<pre>","</pre>"],
     // inserts a link inside <ptr> using the @target; the link in the
     // @href is piped through the rw (rewrite) function before insertion
@@ -10,15 +15,16 @@ export default {
       let content = new Image();
       content.src = this.rw(elt.getAttribute("url"));
       if (elt.hasAttribute("width")) {
-        content.width = elt.getAttribute("width").replace(/[^.0-9]/g, "");
+        content.setAttribute("width",elt.getAttribute("width"));
       }
       if (elt.hasAttribute("height")) {
-        content.height = elt.getAttribute("height").replace(/[^.0-9]/g, "");
+        content.setAttribute("height",elt.getAttribute("height"));
       }
       return content;
     },
-    "list": function(elt) {
-      if (elt.hasAttribute("type") && elt.getAttribute("type") == "gloss") {
+    "list": [
+      // will only run on a list where @type="gloss"
+      ["[type=gloss]", function(elt) {
         let dl = document.createElement("dl");
         for (let child of Array.from(elt.children)) {
           if (child.nodeType == Node.ELEMENT_NODE) {
@@ -35,10 +41,37 @@ export default {
           }
         }
         return dl;
-      } else {
-        return null;
       }
-    },
+    ]],
+    "note": [
+      // Make endnotes
+      ["[place=end]", function(elt){
+        if (!this.noteIndex){
+          this["noteIndex"] = 1;
+        } else {
+          this.noteIndex++;
+        }
+        let id = "_note_" + this.noteIndex;
+        let link = document.createElement("a");
+        link.setAttribute("id", "src" + id);
+        link.setAttribute("href", "#" + id);
+        link.innerHTML = this.noteIndex;
+        let content = document.createElement("sup");
+        content.appendChild(link);
+        let notes = this.dom.querySelector("ol.notes");
+        if (!notes) {
+          notes = document.createElement("ol");
+          notes.setAttribute("class", "notes");
+          this.dom.appendChild(notes);
+        }
+        let note = document.createElement("li");
+        note.id = id;
+        note.innerHTML = elt.innerHTML
+        notes.appendChild(note);
+        return content;
+      }],
+      ["_", ["(",")"]]
+    ],
     "table": function(elt) {
       let table = document.createElement("table");
       table.innerHTML = elt.innerHTML;
@@ -70,6 +103,18 @@ export default {
       }
       return table;
     },
+    "teiHeader": function(e) {
+      this.hideContent(e);
+    },
+    "title": [
+      ["tei-titlestmt>tei-title", function(elt) {
+        let title = document.createElement("title");
+        title.innerHTML = elt.innerText;
+        document.querySelector("head").appendChild(title);
+      }]
+    ]
+  },
+  "teieg": {
     "egXML": function(elt) {
       let pre = document.createElement("pre");
       pre.innerHTML = this.serialize(elt, true);

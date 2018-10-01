@@ -9,12 +9,11 @@
 **tl;dr**: CETEIcean lets you display unmodified TEI documents in a web browser!
 Examples may be found  [here](http://teic.github.io/CETEIcean/).
 
-CETEIcean is a Javascript (ES6) library that allows [TEI](http://tei-c.org)
-documents to be displayed in a web browser without converting them to
+CETEIcean is a Javascript library that allows [TEI](http://tei-c.org)
+documents to be displayed in a web browser without first transforming them to
 HTML. It uses the emerging [Web Components](http://webcomponents.org) standards,
-especially [Custom Elements](http://w3c.github.io/webcomponents/spec/custom/),
-and [Shadow DOM](http://w3c.github.io/webcomponents/spec/shadow/). It works by
-loading the TEI file dynamically, renaming the elements to follow the
+especially [Custom Elements](http://w3c.github.io/webcomponents/spec/custom/). It 
+works by loading the TEI file dynamically, renaming the elements to follow the
 Custom Elements conventions, and registering them with the browser. Browsers
 that support Web Components will use them to add the appropriate display and
 behaviors to the TEI elements; other browsers will use fallback methods to
@@ -36,6 +35,17 @@ collisions (like HTML `<p>` vs. TEI `<p>` for example).
 ## Usage
 
 You can use CETEIcean in your projects just by grabbing the CETEI.js file from the latest [release](https://github.com/TEIC/CETEIcean/releases) and linking to it in an HTML file like the [examples](http://teic.github.io/CETEIcean/) do. Note that you'll want also to grab the example CSS or make your own. If you want to build and play with it on your own, follow the steps below.
+
+### Example
+This code fetches a TEI file, transforms it into HTML Custom Elements, and places the result in a div with id "TEI".
+
+```js
+var CETEIcean = new CETEI()
+CETEIcean.getHTML5("URL_TO_YOUR_TEI.xml", function(data) {
+  document.getElementById("TEI").appendChild(data)
+})
+```
+
 
 ### Install
 Get [NodeJS](https://nodejs.org/).
